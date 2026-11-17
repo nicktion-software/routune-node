@@ -1,0 +1,28 @@
+name: Release
+
+# Publish by pushing a tag that matches package.json, e.g. v0.1.0.
+# npm trusted publishing (OIDC): configure this repository + workflow on npmjs.com for
+# @routune/node; no long-lived token is stored. Provenance is attached automatically.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@latest
+      - run: npm ci
+      - name: Tag matches package.json
+        run: test "v$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME}"
+      - run: npm publish --provenance --access public
