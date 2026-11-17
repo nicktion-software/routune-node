@@ -1,102 +1,125 @@
-# Routune Node.js library
+# Routune Node.js Library
 
-The official Node.js and TypeScript library for the [Routune API](https://routune.com/developers): create and track deliveries in your Routune workspace from your own systems.
+[![npm version](https://img.shields.io/npm/v/@routune/node.svg)](https://www.npmjs.com/package/@routune/node)
+[![CI](https://github.com/routune/routune-node/actions/workflows/ci.yml/badge.svg)](https://github.com/routune/routune-node/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-- Typed requests and responses, generated from the public OpenAPI spec
-- Automatic retries with backoff for timeouts, rate limits and server errors
-- Safe retries for creates: every POST carries an `Idempotency-Key`
-- `for await` over any list to walk every page
-- No runtime dependencies (uses the built-in `fetch`, Node.js 18+)
+The official Node.js library for the [Routune API](https://routune.com/developers). Create orders, assign drivers and read your customers, locations and price sets from server-side JavaScript and TypeScript.
 
-## Install
+## Documentation
+
+API reference and guides: [routune.com/developers](https://routune.com/developers).
+
+## Requirements
+
+- Node.js 18 or later (the library uses the built-in `fetch`)
+- A Routune workspace on a plan that includes API access
+- An API key from **Settings → API keys** in Routune
+
+## Installation
 
 ```sh
 npm install @routune/node
 ```
 
-## Authentication
-
-Create an API key in Routune under **Settings > API keys** and give it only the scopes you need. Keys are secrets: keep them on your server, in an environment variable or a secret manager. The library refuses to run in a browser.
-
-```sh
-export ROUTUNE_API_KEY="rtn_live_…"
-```
-
 ## Usage
+
+The client reads your key from the `ROUTUNE_API_KEY` environment variable:
 
 ```ts
 import Routune from '@routune/node';
 
-const routune = new Routune(); // reads ROUTUNE_API_KEY
-
-const [priceSet] = (await routune.priceSets.list({ active: true, limit: 1 })).data;
+const routune = new Routune();
 
 const order = await routune.orders.create({
-  customer_id: '2f1d7c8e-…',
-  price_set_id: priceSet!.id,
+  customer_id: 'cus_uuid',
+  price_set_id: 'price_set_uuid',
   gross_weight: 12.5,
   chargeable_weight: 12.5,
   reference_number: 'ERP-10042',
   pickup: {
-    location_id: '7b0f…',
+    location_id: 'pickup_location_uuid',
     earliest_time: '2026-11-20T14:00:00Z',
     latest_time: '2026-11-20T16:00:00Z',
   },
   dropoff: {
-    location_id: '9c41…',
+    location_id: 'dropoff_location_uuid',
     earliest_time: '2026-11-20T17:00:00Z',
     latest_time: '2026-11-20T19:00:00Z',
     signature_required: true,
   },
 });
 
-console.log(order.number, order.status);
+console.log(order.number); // ORD-000123
 ```
 
-### Assign a driver to a leg
+Request parameters and responses are fully typed. Field names match the API (`snake_case`), IDs are UUID strings, times are ISO 8601 in UTC and amounts are integers in the currency's smallest unit.
+
+> **Keep your API key secret.** Use it only on your server. Never ship it in a browser bundle or a mobile app. The library refuses to run in a browser.
+
+## Resources
+
+| Resource | Methods | Scope |
+| --- | --- | --- |
+| `orders` | `list`, `create`, `retrieve`, `update` | `orders.read`, `orders.write` |
+| `orders.legs` | `assign` | `orders.assign` |
+| `customers` | `list`, `retrieve` | `customers.read` |
+| `drivers` | `list` | `drivers.read` |
+| `locations` | `list`, `create`, `retrieve` | `locations.read`, `locations.write` |
+| `priceSets` | `list`, `retrieve` | `pricing.read` |
+
+### Assigning a driver
 
 ```ts
-const full = await routune.orders.retrieve(order.id);
-const leg = full.legs![0]!;
-const [driver] = (await routune.drivers.list({ limit: 1 })).data;
+const { legs = [] } = await routune.orders.retrieve(orderId);
 
-await routune.orders.legs.assign(order.id, leg.id, { driver_id: driver!.id });
+await routune.orders.legs.assign(orderId, legs[0].id, {
+  driver_id: driverId,
+});
 ```
 
-To reassign, pass the driver you expect on the leg now. If someone changed it in the meantime the API answers `409 assignment_changed` and nothing moves:
+To reassign a leg safely, send the driver you expect on it now. If the leg changed in the meantime, the API responds with `409 assignment_changed` and nothing is moved:
 
 ```ts
-await routune.orders.legs.assign(order.id, leg.id, {
+await routune.orders.legs.assign(orderId, leg.id, {
   driver_id: newDriverId,
   expected_current_driver_id: leg.assigned_driver_id,
 });
 ```
 
-### Lists and pagination
+## Pagination
 
-Lists are newest first. `await` a list call for one page, or `for await` over it to walk every item; the library follows `next_cursor` for you.
+List methods return results newest first. Awaiting a list call returns a single page:
 
 ```ts
 const page = await routune.orders.list({ status: 'delivered', limit: 100 });
-console.log(page.data.length, page.has_more);
 
+page.data;          // Order[]
+page.has_more;      // boolean
+page.hasNextPage(); // boolean
+await page.getNextPage();
+```
+
+Iterate with `for await` to fetch every page automatically:
+
+```ts
 for await (const order of routune.orders.list({ created_gte: '2026-11-01T00:00:00Z' })) {
-  console.log(order.id);
+  console.log(order.number);
 }
 ```
 
-### Errors
+## Error handling
 
-Failed requests throw a subclass of `APIError` with the API's `code` and a `requestId` to quote to support:
+When the API returns an error, the library throws a subclass of `APIError`:
 
 ```ts
-import { APIError, ConflictError, RateLimitError } from '@routune/node';
+import { APIError, ConflictError } from '@routune/node';
 
 try {
-  await routune.orders.legs.assign(orderId, legId, { driver_id });
+  await routune.orders.legs.assign(orderId, legId, { driver_id: driverId });
 } catch (err) {
   if (err instanceof ConflictError && err.code === 'assignment_changed') {
-    // reload the order and decide again
+    // Reload the order and decide again.
   } else if (err instanceof APIError) {
     console.error(err.status, err.code, err.message, err.requestId);
   } else {
@@ -105,7 +128,7 @@ try {
 }
 ```
 
-| Status | Error class |
+| Status | Error |
 | --- | --- |
 | 400 | `BadRequestError` |
 | 401 | `AuthenticationError` |
@@ -115,40 +138,73 @@ try {
 | 409 | `ConflictError` |
 | 422 | `UnprocessableEntityError` |
 | 429 | `RateLimitError` |
-| 5xx | `InternalServerError` |
-| no answer | `APIConnectionError`, `APIConnectionTimeoutError` |
+| ≥ 500 | `InternalServerError` |
+| No response | `APIConnectionError`, `APIConnectionTimeoutError` |
 
-### Retries, timeouts and idempotency
+Every `APIError` carries `status`, `type`, `code`, `message`, `details` and `requestId`. Include the `requestId` when you contact support.
 
-Connection errors, timeouts, `429` and `5xx` answers are retried twice with exponential backoff (honouring `Retry-After`). POST requests carry an `Idempotency-Key`, the same on every retry, so a retried create never makes a second order. Pass your own key to stay safe across process restarts too:
+## Retries
+
+Connection errors, timeouts, `408`, `429` and `5xx` responses are retried twice by default with exponential backoff. `Retry-After` is respected. Configure the number of retries for the client or for a single request:
 
 ```ts
-const routune = new Routune({ maxRetries: 4, timeout: 20_000 });
+const routune = new Routune({ maxRetries: 4 });
 
-await routune.orders.create(params, { idempotencyKey: `erp-order-${erpId}` });
+await routune.orders.list({}, { maxRetries: 0 });
 ```
 
-### Configuration
+## Idempotency
 
-| Option | Default |
-| --- | --- |
-| `apiKey` | `process.env.ROUTUNE_API_KEY` |
-| `baseURL` | `process.env.ROUTUNE_BASE_URL`, then `https://api.routune.com` |
-| `timeout` | `60000` ms per attempt |
-| `maxRetries` | `2` |
-| `defaultHeaders` | none |
-| `fetch` | global `fetch` |
+Every `POST` request is sent with an `Idempotency-Key`, and retries reuse the same key, so a retried create never produces a duplicate. To stay safe across process restarts, pass a key derived from your own record:
 
-Per-request options: `idempotencyKey`, `timeout`, `maxRetries`, `signal`, `headers`.
+```ts
+await routune.orders.create(params, { idempotencyKey: `erp-order-${erpOrder.id}` });
+```
 
-## Rate limits and usage
+## Timeouts
 
-600 requests a minute per key and 1,200 per workspace. Successful requests count towards your plan's monthly API requests.
+Each attempt times out after 60 seconds by default:
+
+```ts
+const routune = new Routune({ timeout: 20_000 }); // milliseconds
+
+await routune.orders.retrieve(orderId, { timeout: 5_000 });
+```
+
+Pass an `AbortSignal` to cancel a request:
+
+```ts
+const controller = new AbortController();
+await routune.orders.list({}, { signal: controller.signal });
+```
+
+## Configuration
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `apiKey` | `process.env.ROUTUNE_API_KEY` | Workspace API key |
+| `baseURL` | `https://api.routune.com` | Also read from `ROUTUNE_BASE_URL` |
+| `timeout` | `60000` | Milliseconds per attempt |
+| `maxRetries` | `2` | Retries for retryable failures |
+| `defaultHeaders` | `{}` | Headers sent with every request |
+| `fetch` | `globalThis.fetch` | Custom `fetch` implementation |
+
+Per-request options: `idempotencyKey`, `timeout`, `maxRetries`, `signal` and `headers`.
+
+## Rate limits
+
+Each API key can make 600 requests per minute, and each workspace 1,200. Responses include `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` headers. Successful requests count towards your plan's monthly API requests.
 
 ## Versioning
 
-This library follows semantic versioning. The API itself is versioned in the URL (`/v1`); additive changes (new fields, new endpoints) can arrive at any time, so do not fail on unknown fields.
+This package follows [Semantic Versioning](https://semver.org). The API is versioned in its URL (`/v1`). New fields and endpoints may be added at any time without a new API version, so your code should ignore fields it does not recognise.
+
+## Support
+
+- API documentation: [routune.com/developers](https://routune.com/developers)
+- Bugs in this library: [open an issue](https://github.com/routune/routune-node/issues)
+- Security issues: see [SECURITY.md](SECURITY.md). Do not open a public issue.
 
 ## License
 
-MIT
+[MIT](LICENSE). Routune is a product of Nicktion LLC.
