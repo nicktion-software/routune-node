@@ -1,7 +1,7 @@
 # Routune Node.js Library
 
 [![npm version](https://img.shields.io/npm/v/@routune/node.svg)](https://www.npmjs.com/package/@routune/node)
-[![CI](https://github.com/routune/routune-node/actions/workflows/ci.yml/badge.svg)](https://github.com/routune/routune-node/actions/workflows/ci.yml)
+[![CI](https://github.com/nicktion-software/routune-node/actions/workflows/ci.yml/badge.svg)](https://github.com/nicktion-software/routune-node/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 The official Node.js library for the [Routune API](https://routune.com/developers). Create orders, assign drivers and read your customers, locations and price sets from server-side JavaScript and TypeScript.
@@ -202,7 +202,7 @@ This package follows [Semantic Versioning](https://semver.org). The API is versi
 ## Support
 
 - API documentation: [routune.com/developers](https://routune.com/developers)
-- Bugs in this library: [open an issue](https://github.com/routune/routune-node/issues)
+- Bugs in this library: [open an issue](https://github.com/nicktion-software/routune-node/issues)
 - Security issues: see [SECURITY.md](SECURITY.md). Do not open a public issue.
 
 ## License

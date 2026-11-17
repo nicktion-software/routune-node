@@ -7,9 +7,9 @@
   "homepage": "https://routune.com/developers",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/routune/routune-node.git"
+    "url": "git+https://github.com/nicktion-software/routune-node.git"
   },
-  "bugs": "https://github.com/routune/routune-node/issues",
+  "bugs": "https://github.com/nicktion-software/routune-node/issues",
   "keywords": [
     "routune",
     "delivery",
