@@ -32,7 +32,7 @@ function fakeFetch(...responses: Array<Response | Error>) {
   return { fetch: fn as unknown as typeof fetch, calls };
 }
 
-const KEY = 'rtn_live_0123456789abcdefghijklmnopqrstABCDEF';
+const KEY = 'rtn_test_not_a_real_key_for_tests';
 const ORDER = { object: 'order', id: 'b3c1a1de-0000-4000-8000-000000000001', status: 'created' };
 
 function client(f: ReturnType<typeof fakeFetch>, extra: Partial<ConstructorParameters<typeof Routune>[0]> = {}) {
